@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SkoofidMinimap</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <TargetFramework>net472</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>11.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="MelonLoader"><HintPath>MelonLoader.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>UnityEngine.UI.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>UnityEngine.UIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>UnityEngine.IMGUIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>UnityEngine.TextRenderingModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>UnityEngine.InputLegacyModule.dll</HintPath></Reference>
+
+    <Reference Include="Il2Cppmscorlib"><HintPath>Il2Cppmscorlib.dll</HintPath></Reference>
+    <Reference Include="Il2CppInterop.Runtime"><HintPath>Il2CppInterop.Runtime.dll</HintPath></Reference>
+
+    <Reference Include="ModManager&amp;PhoneApp"><HintPath>ModManager&amp;PhoneApp.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
