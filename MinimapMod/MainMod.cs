@@ -5,8 +5,9 @@ using System.Runtime.CompilerServices;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
-[assembly: MelonInfo(typeof(MinimapMod.MainMod), "Skoofidon's Minimap", "2.1.1", "Youseemenot (Orig. Hiccup)", null)]
+[assembly: MelonInfo(typeof(MinimapMod.MainMod), "Skoofidon's Minimap", "2.2.5", "Youseemenot (Orig. Hiccup)", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonOptionalDependencies("ModManager&PhoneApp")]
 
@@ -24,17 +25,30 @@ namespace MinimapMod
         public static MelonPreferences_Entry<bool> prefProperties;
         public static MelonPreferences_Entry<bool> prefVehicles;
         public static MelonPreferences_Entry<bool> prefCoop;
+        public static MelonPreferences_Entry<bool> prefPolice;
         public static MelonPreferences_Entry<bool> prefNavMode;
+
+        // Масштабы
         public static MelonPreferences_Entry<float> prefWindowSize;
         public static MelonPreferences_Entry<float> prefZoom;
         public static MelonPreferences_Entry<float> prefOpacity;
 
+        // Позиционирование
+        public static MelonPreferences_Entry<float> prefMapOffsetX;
+        public static MelonPreferences_Entry<float> prefMapOffsetY;
+        public static MelonPreferences_Entry<float> prefTimeOffsetX;
+        public static MelonPreferences_Entry<float> prefTimeOffsetY;
+        public static MelonPreferences_Entry<float> prefTimeScale;
+
+        // Настройки для стрелки
         public static MelonPreferences_Entry<float> prefArrowSize;
         public static MelonPreferences_Entry<float> prefArrowR;
         public static MelonPreferences_Entry<float> prefArrowG;
         public static MelonPreferences_Entry<float> prefArrowB;
 
         private bool guiVisible = false;
+        private Vector2 scrollPosition = Vector2.zero;
+
         private bool minimapEnabled = true;
         private bool timeBarEnabled = true;
         private bool showOrdersEnabled = true;
@@ -44,10 +58,17 @@ namespace MinimapMod
         private bool showPropertiesEnabled = true;
         private bool showVehiclesEnabled = true;
         private bool coopRadarEnabled = true;
+        private bool policeRadarEnabled = true;
         private bool useNavMode = false;
+
         private float windowSizeMultiplier = 1f;
         private float mapZoom = 1f;
         private float mapOpacity = 1f;
+        private float mapOffsetX = 0f;
+        private float mapOffsetY = 0f;
+        private float timeOffsetX = 0f;
+        private float timeOffsetY = 0f;
+        private float timeScale = 1f;
 
         private float arrowSize = 1.4f;
         private float arrowR = 0f;
@@ -78,12 +99,16 @@ namespace MinimapMod
         private RectTransform cachedContentRt;
         private RectTransform cachedRotatorRt;
         private Transform cachedMinimapMask;
-        private RectTransform cachedLocalPlayerUI; // Новое поле для фикса кооп-радара
+
+        private RectTransform cachedLocalPlayerUI;
         private readonly List<RectTransform> activeCoopPlayerRts = new List<RectTransform>();
-
         private List<GameObject> coopMarkers = new List<GameObject>();
-        private Dictionary<Transform, GameObject> syncedPOIs = new Dictionary<Transform, GameObject>();
 
+        private List<Transform> activePoliceTransforms = new List<Transform>();
+        private List<GameObject> policeMarkers = new List<GameObject>();
+        private Stack<Transform> scannerStack = new Stack<Transform>(); // Переиспользуемый стек для 3D сканера
+
+        private Dictionary<Transform, GameObject> syncedPOIs = new Dictionary<Transform, GameObject>();
         private readonly List<Transform> currentKeysBuffer = new List<Transform>();
         private readonly List<Transform> validKeysBuffer = new List<Transform>();
         private static readonly char[] spaceSeparator = new char[] { ' ' };
@@ -92,31 +117,38 @@ namespace MinimapMod
         private static bool isEnabled = true;
         private bool isModManagerInstalled = false;
         private bool hasLoggedUpdateError = false;
-
         private static Color gridColor = new Color(0.3f, 0.3f, 0.3f, 1f);
 
         public override void OnInitializeMelon()
         {
             prefCategory = MelonPreferences.CreateCategory("Skoofidon's Minimap", "Skoofidon's Minimap");
 
-            prefEnabled = prefCategory.CreateEntry("EnableMinimap", true, "Enable Minimap", "Enable or disable the minimap UI.");
-            prefTime = prefCategory.CreateEntry("EnableTime", true, "Time Display", "Show the current in-game time below the minimap.");
-            prefOrders = prefCategory.CreateEntry("ShowOrders", true, "Show Orders", "Show green order markers.");
-            prefDealers = prefCategory.CreateEntry("ShowDealers", true, "Show Dealers", "Show dealer markers.");
-            prefCustomers = prefCategory.CreateEntry("ShowCustomers", true, "Show Customers", "Show potential customer markers.");
-            prefDeadDrops = prefCategory.CreateEntry("ShowDeadDrops", true, "Show Dead Drops", "Show dead drop locations.");
-            prefProperties = prefCategory.CreateEntry("ShowProperties", true, "Show Properties", "Show property markers.");
-            prefVehicles = prefCategory.CreateEntry("ShowVehicles", true, "Show Vehicles", "Show owned vehicle markers.");
-            prefCoop = prefCategory.CreateEntry("ShowCoop", true, "Show Co-op Players", "Show other players in Co-op.");
-            prefNavMode = prefCategory.CreateEntry("NavMode", false, "Navigation Mode", "Map rotates to match your looking direction.");
-            prefWindowSize = prefCategory.CreateEntry("WindowSize", 1.0f, "Window Size Multiplier", "Minimap window UI size (1.0 to 3.0).");
-            prefZoom = prefCategory.CreateEntry("MapZoom", 1.0f, "Map Content Zoom", "Zoom scale of the map inside the window (0.5 to 3.0).");
-            prefOpacity = prefCategory.CreateEntry("MapOpacity", 1.0f, "Minimap Opacity", "Minimap background opacity (0.2 to 1.0).");
+            prefEnabled = prefCategory.CreateEntry("EnableMinimap", true, "Enable Minimap");
+            prefTime = prefCategory.CreateEntry("EnableTime", true, "Time Display");
+            prefOrders = prefCategory.CreateEntry("ShowOrders", true, "Show Orders");
+            prefDealers = prefCategory.CreateEntry("ShowDealers", true, "Show Dealers");
+            prefCustomers = prefCategory.CreateEntry("ShowCustomers", true, "Show Customers");
+            prefDeadDrops = prefCategory.CreateEntry("ShowDeadDrops", true, "Show Dead Drops");
+            prefProperties = prefCategory.CreateEntry("ShowProperties", true, "Show Properties");
+            prefVehicles = prefCategory.CreateEntry("ShowVehicles", true, "Show Vehicles");
+            prefCoop = prefCategory.CreateEntry("ShowCoop", true, "Show Co-op Players (3D)");
+            prefPolice = prefCategory.CreateEntry("ShowPolice", true, "Show Police Radar (3D)");
+            prefNavMode = prefCategory.CreateEntry("NavMode", false, "Navigation Mode");
 
-            prefArrowSize = prefCategory.CreateEntry("ArrowSize", 1.4f, "Arrow Size", "Size of the player arrow marker.");
-            prefArrowR = prefCategory.CreateEntry("ArrowR", 0.0f, "Arrow Color R", "Red color channel of arrow.");
-            prefArrowG = prefCategory.CreateEntry("ArrowG", 0.8f, "Arrow Color G", "Green color channel of arrow.");
-            prefArrowB = prefCategory.CreateEntry("ArrowB", 1.0f, "Arrow Color B", "Blue color channel of arrow.");
+            prefWindowSize = prefCategory.CreateEntry("WindowSize", 1.0f, "Window Size Multiplier");
+            prefZoom = prefCategory.CreateEntry("MapZoom", 1.0f, "Map Content Zoom");
+            prefOpacity = prefCategory.CreateEntry("MapOpacity", 1.0f, "Minimap Opacity");
+
+            prefMapOffsetX = prefCategory.CreateEntry("MapOffsetX", 0f, "Map Offset X");
+            prefMapOffsetY = prefCategory.CreateEntry("MapOffsetY", 0f, "Map Offset Y");
+            prefTimeOffsetX = prefCategory.CreateEntry("TimeOffsetX", 0f, "Time Offset X");
+            prefTimeOffsetY = prefCategory.CreateEntry("TimeOffsetY", 0f, "Time Offset Y");
+            prefTimeScale = prefCategory.CreateEntry("TimeScale", 1f, "Time Scale");
+
+            prefArrowSize = prefCategory.CreateEntry("ArrowSize", 1.4f, "Arrow Size");
+            prefArrowR = prefCategory.CreateEntry("ArrowR", 0.0f, "Arrow Color R");
+            prefArrowG = prefCategory.CreateEntry("ArrowG", 0.8f, "Arrow Color G");
+            prefArrowB = prefCategory.CreateEntry("ArrowB", 1.0f, "Arrow Color B");
 
             foreach (var mod in MelonBase.RegisteredMelons)
             {
@@ -143,10 +175,7 @@ namespace MinimapMod
                 ModManagerPhoneApp.ModSettingsEvents.OnPhonePreferencesSaved += HandleSettingsUpdate;
                 ModManagerPhoneApp.ModSettingsEvents.OnMenuPreferencesSaved += HandleSettingsUpdate;
             }
-            catch (Exception)
-            {
-                // Игнорируем молча, если менеджера нет
-            }
+            catch (Exception) { }
         }
 
         private void HandleSettingsUpdate()
@@ -160,24 +189,29 @@ namespace MinimapMod
             showPropertiesEnabled = prefProperties.Value;
             showVehiclesEnabled = prefVehicles.Value;
             coopRadarEnabled = prefCoop.Value;
+            policeRadarEnabled = prefPolice.Value;
             useNavMode = prefNavMode.Value;
 
             windowSizeMultiplier = Mathf.Clamp(prefWindowSize.Value, 1f, 3f);
             mapZoom = Mathf.Clamp(prefZoom.Value, 0.5f, 3f);
             mapOpacity = Mathf.Clamp(prefOpacity.Value, 0.2f, 1f);
 
+            mapOffsetX = prefMapOffsetX.Value;
+            mapOffsetY = prefMapOffsetY.Value;
+            timeOffsetX = prefTimeOffsetX.Value;
+            timeOffsetY = prefTimeOffsetY.Value;
+            timeScale = Mathf.Clamp(prefTimeScale.Value, 0.5f, 3f);
+
             arrowSize = Mathf.Clamp(prefArrowSize.Value, 0.5f, 3f);
             arrowR = Mathf.Clamp(prefArrowR.Value, 0f, 1f);
             arrowG = Mathf.Clamp(prefArrowG.Value, 0f, 1f);
             arrowB = Mathf.Clamp(prefArrowB.Value, 0f, 1f);
 
+            UpdateLayoutPositions();
             UpdateMinimapSize();
             UpdateMinimapOpacity();
 
-            if (mapContentObject != null)
-            {
-                mapContentObject.transform.localScale = new Vector3(mapZoom, mapZoom, 1f);
-            }
+            if (mapContentObject != null) mapContentObject.transform.localScale = new Vector3(mapZoom, mapZoom, 1f);
 
             if (cachedPlayerMarker != null)
             {
@@ -187,7 +221,9 @@ namespace MinimapMod
 
             if (minimapDisplayObject != null) minimapDisplayObject.SetActive(minimapEnabled);
             if (minimapTimeContainer != null) minimapTimeContainer.gameObject.SetActive(minimapEnabled && timeBarEnabled);
-            if (!coopRadarEnabled) ClearCoopMarkers();
+
+            if (!coopRadarEnabled) ClearMarkers(coopMarkers);
+            if (!policeRadarEnabled) ClearMarkers(policeMarkers);
         }
 
         private void SaveSettingsFromF3()
@@ -201,10 +237,16 @@ namespace MinimapMod
             prefProperties.Value = showPropertiesEnabled;
             prefVehicles.Value = showVehiclesEnabled;
             prefCoop.Value = coopRadarEnabled;
+            prefPolice.Value = policeRadarEnabled;
             prefNavMode.Value = useNavMode;
             prefWindowSize.Value = windowSizeMultiplier;
             prefZoom.Value = mapZoom;
             prefOpacity.Value = mapOpacity;
+            prefMapOffsetX.Value = mapOffsetX;
+            prefMapOffsetY.Value = mapOffsetY;
+            prefTimeOffsetX.Value = timeOffsetX;
+            prefTimeOffsetY.Value = timeOffsetY;
+            prefTimeScale.Value = timeScale;
             prefArrowSize.Value = arrowSize;
             prefArrowR.Value = arrowR;
             prefArrowG.Value = arrowG;
@@ -225,59 +267,78 @@ namespace MinimapMod
                 solidColorTex.Apply();
             }
 
-            float currentMapSize = 150f * windowSizeMultiplier;
-            float menuY = 20f + currentMapSize + 60f;
-
-            Rect menuRect = new Rect(Screen.width - 250, menuY, 230, 585);
+            Rect menuRect = new Rect(Screen.width - 260, 50, 240, 500);
             GUI.color = new Color(0.15f, 0.15f, 0.15f, 0.95f);
             GUI.DrawTexture(menuRect, solidColorTex);
             GUI.color = Color.white;
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 5, 210, 20), "<b>Skoofidon's Minimap</b>");
+            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 5, 220, 20), "<b>Skoofidon's Minimap</b>");
 
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 30, 210, 25), "Minimap Enabled", ref minimapEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 60, 210, 25), "Time Display", ref timeBarEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 90, 210, 25), "Show Orders", ref showOrdersEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 120, 210, 25), "Show Dealers", ref showDealersEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 150, 210, 25), "Show Customers", ref showCustomersEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 180, 210, 25), "Show Dead Drops", ref showDeadDropsEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 210, 210, 25), "Show Co-op Radar", ref coopRadarEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 240, 210, 25), "Navigation Mode", ref useNavMode, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 270, 210, 25), "Show Properties", ref showPropertiesEnabled, SaveSettingsFromF3);
-            DrawToggle(new Rect(menuRect.x + 10, menuRect.y + 300, 210, 25), "Show Vehicles", ref showVehiclesEnabled, SaveSettingsFromF3);
+            scrollPosition = GUI.BeginScrollView(
+                new Rect(menuRect.x, menuRect.y + 30, menuRect.width, menuRect.height - 35),
+                scrollPosition,
+                new Rect(0, 0, 220, 950));
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 330, 210, 20), "Window Size: " + windowSizeMultiplier.ToString("F1") + "x");
-            float newWinSize = GUI.HorizontalSlider(new Rect(menuRect.x + 10, menuRect.y + 350, 210, 20), windowSizeMultiplier, 1f, 3f);
-            if (Mathf.Abs(newWinSize - windowSizeMultiplier) > 0.01f) { windowSizeMultiplier = newWinSize; SaveSettingsFromF3(); }
+            float curY = 0f;
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 370, 210, 20), "Map Zoom: " + mapZoom.ToString("F1") + "x");
-            float newZoom = GUI.HorizontalSlider(new Rect(menuRect.x + 10, menuRect.y + 390, 210, 20), mapZoom, 0.5f, 3f);
-            if (Mathf.Abs(newZoom - mapZoom) > 0.01f) { mapZoom = newZoom; SaveSettingsFromF3(); }
+            DrawToggle(new Rect(10, curY, 200, 25), "Minimap Enabled", ref minimapEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Time Display", ref timeBarEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Navigation Mode", ref useNavMode, SaveSettingsFromF3); curY += 30;
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 410, 210, 20), "Opacity: " + Mathf.RoundToInt(mapOpacity * 100) + "%");
-            float newOpacity = GUI.HorizontalSlider(new Rect(menuRect.x + 10, menuRect.y + 430, 210, 20), mapOpacity, 0.2f, 1f);
-            if (Mathf.Abs(newOpacity - mapOpacity) > 0.01f) { mapOpacity = newOpacity; SaveSettingsFromF3(); }
+            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- 2D Markers (Phone UI) ---</b>"); curY += 25;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Orders", ref showOrdersEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Dealers", ref showDealersEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Customers", ref showCustomersEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Dead Drops", ref showDeadDropsEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Properties", ref showPropertiesEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Vehicles", ref showVehiclesEnabled, SaveSettingsFromF3); curY += 30;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Co-op Players", ref coopRadarEnabled, SaveSettingsFromF3); curY += 30;
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 450, 210, 20), "Arrow Size: " + arrowSize.ToString("F1") + "x");
-            float newASize = GUI.HorizontalSlider(new Rect(menuRect.x + 10, menuRect.y + 470, 210, 20), arrowSize, 0.5f, 3f);
-            if (Mathf.Abs(newASize - arrowSize) > 0.01f) { arrowSize = newASize; SaveSettingsFromF3(); }
+            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- 3D Radar (Real-time) ---</b>"); curY += 25;
+            DrawToggle(new Rect(10, curY, 200, 25), "Show Police", ref policeRadarEnabled, SaveSettingsFromF3); curY += 30;
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 490, 100, 20), "Arrow Color");
+            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- Map Layout & Size ---</b>"); curY += 25;
+            DrawSlider(ref curY, "Window Size", ref windowSizeMultiplier, 1f, 3f);
+            DrawSlider(ref curY, "Map Zoom", ref mapZoom, 0.5f, 3f);
+            DrawSlider(ref curY, "Opacity", ref mapOpacity, 0.2f, 1f);
+            DrawSlider(ref curY, "Map Offset X", ref mapOffsetX, -Screen.width, Screen.width);
+            DrawSlider(ref curY, "Map Offset Y", ref mapOffsetY, -Screen.height, Screen.height);
+
+            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- Clock Layout ---</b>"); curY += 25;
+            DrawSlider(ref curY, "Clock Offset X", ref timeOffsetX, -Screen.width, Screen.width);
+            DrawSlider(ref curY, "Clock Offset Y", ref timeOffsetY, -Screen.height, Screen.height);
+            DrawSlider(ref curY, "Clock Scale", ref timeScale, 0.5f, 3f);
+
+            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- Player Arrow ---</b>"); curY += 25;
+            DrawSlider(ref curY, "Arrow Size", ref arrowSize, 0.5f, 3f);
+
+            GUI.Label(new Rect(10, curY, 100, 20), "Arrow Color");
             GUI.color = new Color(arrowR, arrowG, arrowB);
-            GUI.DrawTexture(new Rect(menuRect.x + 150, menuRect.y + 490, 70, 20), solidColorTex);
+            GUI.DrawTexture(new Rect(130, curY, 70, 20), solidColorTex);
             GUI.color = Color.white;
+            curY += 25;
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 515, 20, 20), "R");
-            float newR = GUI.HorizontalSlider(new Rect(menuRect.x + 30, menuRect.y + 520, 190, 20), arrowR, 0f, 1f);
-            if (Mathf.Abs(newR - arrowR) > 0.01f) { arrowR = newR; SaveSettingsFromF3(); }
+            DrawColorSlider(ref curY, "R", ref arrowR);
+            DrawColorSlider(ref curY, "G", ref arrowG);
+            DrawColorSlider(ref curY, "B", ref arrowB);
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 535, 20, 20), "G");
-            float newG = GUI.HorizontalSlider(new Rect(menuRect.x + 30, menuRect.y + 540, 190, 20), arrowG, 0f, 1f);
-            if (Mathf.Abs(newG - arrowG) > 0.01f) { arrowG = newG; SaveSettingsFromF3(); }
+            GUI.EndScrollView();
+        }
 
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 555, 20, 20), "B");
-            float newB = GUI.HorizontalSlider(new Rect(menuRect.x + 30, menuRect.y + 560, 190, 20), arrowB, 0f, 1f);
-            if (Mathf.Abs(newB - arrowB) > 0.01f) { arrowB = newB; SaveSettingsFromF3(); }
+        private void DrawSlider(ref float curY, string label, ref float val, float min, float max)
+        {
+            GUI.Label(new Rect(10, curY, 200, 20), $"{label}: {val.ToString("F1")}");
+            float newVal = GUI.HorizontalSlider(new Rect(10, curY + 20, 200, 20), val, min, max);
+            if (Mathf.Abs(newVal - val) > 0.01f) { val = newVal; SaveSettingsFromF3(); }
+            curY += 40;
+        }
+
+        private void DrawColorSlider(ref float curY, string label, ref float val)
+        {
+            GUI.Label(new Rect(10, curY, 20, 20), label);
+            float newVal = GUI.HorizontalSlider(new Rect(30, curY + 5, 170, 20), val, 0f, 1f);
+            if (Mathf.Abs(newVal - val) > 0.01f) { val = newVal; SaveSettingsFromF3(); }
+            curY += 20;
         }
 
         private void DrawToggle(Rect position, string label, ref bool state, Action onToggle)
@@ -316,15 +377,19 @@ namespace MinimapMod
                         cachedMinimapMask = null;
                         cachedLocalPlayerUI = null;
                         activeCoopPlayerRts.Clear();
+                        activePoliceTransforms.Clear();
                     }
 
                     CreateMinimapUI();
+                    UpdateLayoutPositions();
                     UpdateMinimapSize();
                     UpdateMinimapOpacity();
 
                     MelonCoroutines.Start(FindGameObjectsRoutine());
                     MelonCoroutines.Start(UpdateMinimapTimeCoroutine());
                     MelonCoroutines.Start(POISyncCoroutine());
+
+                    MelonCoroutines.Start(OptimizedPoliceScannerCoroutine());
 
                     isInitializing = false;
                     hasLoggedUpdateError = false;
@@ -342,10 +407,7 @@ namespace MinimapMod
         {
             try
             {
-                if (Input.GetKeyDown(KeyCode.F3))
-                {
-                    guiVisible = !guiVisible;
-                }
+                if (Input.GetKeyDown(KeyCode.F3)) guiVisible = !guiVisible;
 
                 if (Input.GetKeyDown(KeyCode.F4))
                 {
@@ -370,6 +432,8 @@ namespace MinimapMod
 
                 UpdatePlayerArrow();
                 UpdateCoopMarkers();
+
+                if (policeRadarEnabled) Update3DMarkers(activePoliceTransforms, policeMarkers, new Color(0.2f, 0.4f, 1f));
             }
             catch (Exception ex)
             {
@@ -397,6 +461,7 @@ namespace MinimapMod
             if (playerObject != null)
             {
                 MelonLogger.Msg("--- 3D OBJECTS WITHIN 5 METERS ---");
+
                 GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
                 HashSet<string> loggedRoots = new HashSet<string>();
 
@@ -431,6 +496,132 @@ namespace MinimapMod
             return path;
         }
 
+        private IEnumerator OptimizedPoliceScannerCoroutine()
+        {
+            while (true)
+            {
+                if (!minimapEnabled || playerObject == null || !policeRadarEnabled)
+                {
+                    yield return new WaitForSeconds(2f);
+                    continue;
+                }
+
+                List<Transform> newPoliceList = new List<Transform>();
+                int checkCount = 0;
+                scannerStack.Clear();
+
+                // Перебираем ВСЕ загруженные сцены, чтобы найти полицию даже если она в другом чанке
+                for (int sIdx = 0; sIdx < SceneManager.sceneCount; sIdx++)
+                {
+                    Scene s = SceneManager.GetSceneAt(sIdx);
+                    if (s.isLoaded)
+                    {
+                        GameObject[] roots = s.GetRootGameObjects();
+                        foreach (var r in roots) scannerStack.Push(r.transform);
+
+                        while (scannerStack.Count > 0)
+                        {
+                            Transform t = scannerStack.Pop();
+
+                            if (t != null && t.gameObject.activeInHierarchy)
+                            {
+                                string name = t.name;
+                                if (name.Contains("SUV_Police") || name.Contains("Officer"))
+                                {
+                                    if (t.root != playerObject.transform.root)
+                                    {
+                                        newPoliceList.Add(t);
+                                    }
+                                }
+
+                                int childCount = t.childCount;
+                                for (int j = 0; j < childCount; j++)
+                                {
+                                    scannerStack.Push(t.GetChild(j));
+                                }
+                            }
+
+                            checkCount++;
+                            if (checkCount >= 200)
+                            {
+                                checkCount = 0;
+                                yield return null;
+                            }
+                        }
+                    }
+                }
+
+                activePoliceTransforms = newPoliceList;
+                yield return new WaitForSeconds(3f);
+            }
+        }
+
+        private void Update3DMarkers(List<Transform> targets, List<GameObject> markers, Color color)
+        {
+            if (cachedMinimapMask == null || playerObject == null) return;
+
+            float minimapRadius = 70f * windowSizeMultiplier - 5f;
+            int markerIndex = 0;
+
+            foreach (Transform t in targets)
+            {
+                if (t == null) continue;
+
+                Vector3 diff = t.position - playerObject.transform.position;
+                Vector2 offset = new Vector2(diff.x, diff.z) * mapScale * mapZoom;
+
+                if (useNavMode)
+                {
+                    float angle = playerObject.transform.rotation.eulerAngles.y * Mathf.Deg2Rad;
+                    float cos = Mathf.Cos(angle);
+                    float sin = Mathf.Sin(angle);
+                    offset = new Vector2(offset.x * cos - offset.y * sin, offset.x * sin + offset.y * cos);
+                }
+
+                if (markerIndex >= markers.Count)
+                {
+                    GameObject marker = new GameObject("3DMarker_" + markerIndex);
+                    marker.transform.SetParent(cachedMinimapMask, false);
+                    RectTransform mrt = marker.AddComponent<RectTransform>();
+                    mrt.sizeDelta = new Vector2(10f, 10f);
+                    mrt.anchorMin = new Vector2(0.5f, 0.5f);
+                    mrt.anchorMax = new Vector2(0.5f, 0.5f);
+                    mrt.pivot = new Vector2(0.5f, 0.5f);
+
+                    Image img = marker.AddComponent<Image>();
+                    img.sprite = CreateCircleSprite(10, color);
+                    markers.Add(marker);
+                }
+
+                GameObject currentMarker = markers[markerIndex];
+                currentMarker.SetActive(true);
+                RectTransform markerRt = currentMarker.GetComponent<RectTransform>();
+
+                if (offset.magnitude > minimapRadius)
+                {
+                    markerRt.anchoredPosition = offset.normalized * minimapRadius;
+                    currentMarker.GetComponent<Image>().color = new Color(color.r, color.g, color.b, 0.4f);
+                }
+                else
+                {
+                    markerRt.anchoredPosition = offset;
+                    currentMarker.GetComponent<Image>().color = color;
+                }
+
+                markerIndex++;
+            }
+
+            for (int i = markerIndex; i < markers.Count; i++)
+            {
+                if (markers[i] != null) markers[i].SetActive(false);
+            }
+        }
+
+        private void ClearMarkers(List<GameObject> markers)
+        {
+            foreach (var m in markers) if (m != null) m.SetActive(false);
+        }
+
         private IEnumerator POISyncCoroutine()
         {
             while (true)
@@ -463,7 +654,7 @@ namespace MinimapMod
                         if (!foundLocalPlayer)
                         {
                             foundLocalPlayer = true;
-                            cachedLocalPlayerUI = child.GetComponent<RectTransform>(); // Сохраняем локального игрока
+                            cachedLocalPlayerUI = child.GetComponent<RectTransform>();
                         }
                         else
                         {
@@ -475,8 +666,8 @@ namespace MinimapMod
 
                     if (childName.Contains("PlayerPoI")) continue;
 
-                    if (!showOrdersEnabled && childName.Contains("ContractPoI")) continue;
                     if (!showDealersEnabled && childName.Contains("NPCPoI")) continue;
+                    if (!showOrdersEnabled && childName.Contains("ContractPoI")) continue;
                     if (!showCustomersEnabled && childName.Contains("PotentialCustomerPoI")) continue;
                     if (!showDeadDropsEnabled && childName.Contains("DeaddropPoI")) continue;
                     if (!showPropertiesEnabled && childName.Contains("PropertyPoI")) continue;
@@ -531,7 +722,7 @@ namespace MinimapMod
         {
             if (!coopRadarEnabled || cachedMapContent == null || playerObject == null || minimapDisplayObject == null || cachedMinimapMask == null || cachedLocalPlayerUI == null)
             {
-                ClearCoopMarkers();
+                ClearMarkers(coopMarkers);
                 return;
             }
 
@@ -567,10 +758,7 @@ namespace MinimapMod
                 currentMarker.SetActive(true);
                 RectTransform markerRt = currentMarker.GetComponent<RectTransform>();
 
-                // Считаем дистанцию между иконками прямо в UI пространства оригинальной карты
                 Vector2 rawOffset = rt.anchoredPosition - cachedLocalPlayerUI.anchoredPosition;
-
-                // Сжимаем её до размеров мини-карты и применяем зум
                 Vector2 offset = new Vector2(rawOffset.x * ratioX, rawOffset.y * ratioY) * mapZoom;
 
                 if (useNavMode)
@@ -601,9 +789,17 @@ namespace MinimapMod
             }
         }
 
-        private void ClearCoopMarkers()
+        private void UpdateLayoutPositions()
         {
-            foreach (var m in coopMarkers) if (m != null) m.SetActive(false);
+            if (minimapFrameRect != null)
+            {
+                minimapFrameRect.anchoredPosition = new Vector2(-20f + mapOffsetX, -20f + mapOffsetY);
+            }
+            if (minimapTimeContainer != null)
+            {
+                minimapTimeContainer.anchoredPosition = new Vector2(timeOffsetX, -5f + timeOffsetY);
+                minimapTimeContainer.localScale = new Vector3(timeScale, timeScale, 1f);
+            }
         }
 
         private void UpdateMinimapSize()
@@ -793,7 +989,6 @@ namespace MinimapMod
             minimapFrameRect.anchorMin = new Vector2(1f, 1f);
             minimapFrameRect.anchorMax = new Vector2(1f, 1f);
             minimapFrameRect.pivot = new Vector2(1f, 1f);
-            minimapFrameRect.anchoredPosition = new Vector2(-20f, -20f);
 
             minimapDisplayObject = new GameObject("MinimapDisplay");
             minimapDisplayObject.transform.SetParent(frameObj.transform, false);
@@ -871,7 +1066,6 @@ namespace MinimapMod
             minimapTimeContainer.anchorMin = new Vector2(0.5f, 0f);
             minimapTimeContainer.anchorMax = new Vector2(0.5f, 0f);
             minimapTimeContainer.pivot = new Vector2(0.5f, 1f);
-            minimapTimeContainer.anchoredPosition = new Vector2(0f, -5f);
 
             Image val3 = val.AddComponent<Image>();
             val3.color = new Color(0.2f, 0.2f, 0.2f, 0.5f);
