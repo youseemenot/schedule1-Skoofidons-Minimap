@@ -361,47 +361,69 @@ namespace MinimapMod
             }
         }
 
-        public override void OnSceneWasLoaded(int buildIndex, string sceneName)
-        {
-            try
-            {
-                if (sceneName == "Main" && !isInitializing)
+                public override void OnSceneWasLoaded(int buildIndex, string sceneName)
                 {
-                    isInitializing = true;
-                    if (minimapObject != null)
+                    try
                     {
-                        UnityEngine.Object.Destroy(minimapObject);
-                        minimapObject = null;
-                        cachedContentRt = null;
-                        cachedRotatorRt = null;
-                        cachedMinimapMask = null;
-                        cachedLocalPlayerUI = null;
-                        activeCoopPlayerRts.Clear();
-                        activePoliceTransforms.Clear();
+                        if (sceneName == "Main" && !isInitializing)
+                        {
+                            isInitializing = true;
+                            if (minimapObject != null)
+                            {
+                                UnityEngine.Object.Destroy(minimapObject);
+                                minimapObject = null;
+                                cachedContentRt = null;
+                                cachedRotatorRt = null;
+                                cachedMinimapMask = null;
+                                cachedLocalPlayerUI = null;
+                                activeCoopPlayerRts.Clear();
+                                activePoliceTransforms.Clear();
+                                coopMarkers.Clear();
+                                policeMarkers.Clear();
+                            }
+
+                            CreateMinimapUI();
+                            UpdateLayoutPositions();
+                            UpdateMinimapSize();
+                            UpdateMinimapOpacity();
+
+                            MelonCoroutines.Start(FindGameObjectsRoutine());
+                            MelonCoroutines.Start(UpdateMinimapTimeCoroutine());
+                            MelonCoroutines.Start(POISyncCoroutine());
+
+                            MelonCoroutines.Start(OptimizedPoliceScannerCoroutine());
+
+                            isInitializing = false;
+                            hasLoggedUpdateError = false;
+                            isEnabled = true;
+                        }
+                        else if (sceneName != "Main")
+                        {
+                            // Мы вышли в главное меню или другую сцену - зачищаем миникарту
+                            if (minimapObject != null)
+                            {
+                                UnityEngine.Object.Destroy(minimapObject);
+                                minimapObject = null;
+                                cachedContentRt = null;
+                                cachedRotatorRt = null;
+                                cachedMinimapMask = null;
+                                cachedLocalPlayerUI = null;
+                                activeCoopPlayerRts.Clear();
+                                activePoliceTransforms.Clear();
+                                coopMarkers.Clear();
+                                policeMarkers.Clear();
+                            }
+
+                            isEnabled = false; // Отключаем логику в OnUpdate
+                            isInitializing = false;
+                        }
                     }
-
-                    CreateMinimapUI();
-                    UpdateLayoutPositions();
-                    UpdateMinimapSize();
-                    UpdateMinimapOpacity();
-
-                    MelonCoroutines.Start(FindGameObjectsRoutine());
-                    MelonCoroutines.Start(UpdateMinimapTimeCoroutine());
-                    MelonCoroutines.Start(POISyncCoroutine());
-
-                    MelonCoroutines.Start(OptimizedPoliceScannerCoroutine());
-
-                    isInitializing = false;
-                    hasLoggedUpdateError = false;
-                    isEnabled = true;
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Error("Failed to initialize Skoofidon's Minimap: " + ex.Message);
+                        isInitializing = false;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error("Failed to initialize Skoofidon's Minimap: " + ex.Message);
-                isInitializing = false;
-            }
-        }
 
         public override void OnUpdate()
         {
