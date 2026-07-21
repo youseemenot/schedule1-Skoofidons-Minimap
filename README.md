@@ -29,7 +29,7 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
 ## Requirements
 
 - **Schedule I** on PC
-- [MelonLoader](https://github.com/LavaGang/MelonLoader)
+- [MelonLoader](https://github.com/LavaGang/ModManager)
 
 **Mod Manager & Phone App is optional.** The minimap has its own in-game settings menu and works without it.
 
@@ -91,10 +91,12 @@ Open the `F3` menu and reset the minimap or clock offsets toward `0`.
 
 When reporting a problem, include your game version, MelonLoader version, mod version, and the relevant section of `MelonLoader\Latest.log`.
 
-## Credits
+## Credits and inspiration
 
-- **Youseemenot** — current version and development
-- **Hiccup** — original minimap
+Skoofidon's Minimap was inspired by the functional minimap mod created by **Hiccup**. It was the example through which we first learned how minimap modding for Schedule I worked. Building on that experience, we created our own mod and developed it into a significantly more capable minimap with a much broader feature set.
+
+- **Youseemenot** — Skoofidon's Minimap creator and developer
+- **Hiccup** — original inspiration and learning reference
 
 This is an unofficial community mod and is not affiliated with TVGS or the developers of Schedule I.
 
