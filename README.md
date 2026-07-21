@@ -29,7 +29,7 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
 ## Requirements
 
 - **Schedule I** on PC
-- [MelonLoader](https://github.com/LavaGang/ModManager)
+- [MelonLoader](https://github.com/LavaGang/MelonLoader)
 
 **Mod Manager & Phone App is optional.** The minimap has its own in-game settings menu and works without it.
 
