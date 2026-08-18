@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-[assembly: MelonInfo(typeof(MinimapMod.MainMod), "Skoofidon's Minimap", "2.2.5", "Youseemenot (Orig. Hiccup)", null)]
+[assembly: MelonInfo(typeof(MinimapMod.MainMod), "Skoofidon's Minimap", "2.2.7", "Youseemenot (Orig. Hiccup)", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonOptionalDependencies("ModManager&PhoneApp")]
 
@@ -48,6 +48,9 @@ namespace MinimapMod
 
         private bool guiVisible = false;
         private Vector2 scrollPosition = Vector2.zero;
+        private bool hasLoggedGuiError = false;
+        private bool settingsSavePending = false;
+        private float settingsSaveDueAt = 0f;
 
         private bool minimapEnabled = true;
         private bool timeBarEnabled = true;
@@ -86,8 +89,6 @@ namespace MinimapMod
         private static RectTransform gridContainer;
         private Text minimapTimeText;
         private Text cachedGameTimeText;
-        private static Texture2D solidColorTex;
-
         private static GameObject mapAppObject;
         private static GameObject viewportObject;
         private static GameObject playerObject;
@@ -103,15 +104,27 @@ namespace MinimapMod
         private RectTransform cachedLocalPlayerUI;
         private readonly List<RectTransform> activeCoopPlayerRts = new List<RectTransform>();
         private List<GameObject> coopMarkers = new List<GameObject>();
+        private readonly List<RectTransform> coopMarkerRects = new List<RectTransform>();
+        private readonly List<Image> coopMarkerImages = new List<Image>();
 
         private List<Transform> activePoliceTransforms = new List<Transform>();
+        private List<Transform> policeScanBuffer = new List<Transform>();
         private List<GameObject> policeMarkers = new List<GameObject>();
+        private readonly List<RectTransform> policeMarkerRects = new List<RectTransform>();
+        private readonly List<Image> policeMarkerImages = new List<Image>();
+        private readonly Stack<Transform> diagnosticStack = new Stack<Transform>();
         private Stack<Transform> scannerStack = new Stack<Transform>(); // Переиспользуемый стек для 3D сканера
 
         private Dictionary<Transform, GameObject> syncedPOIs = new Dictionary<Transform, GameObject>();
         private readonly List<Transform> currentKeysBuffer = new List<Transform>();
-        private readonly List<Transform> validKeysBuffer = new List<Transform>();
+        private readonly HashSet<Transform> validKeysBuffer = new HashSet<Transform>();
         private static readonly char[] spaceSeparator = new char[] { ' ' };
+
+        private object findObjectsCoroutine;
+        private object timeCoroutine;
+        private object poiCoroutine;
+        private object policeCoroutine;
+        private object diagnosticCoroutine;
 
         private static bool isInitializing = false;
         private static bool isEnabled = true;
@@ -161,10 +174,16 @@ namespace MinimapMod
 
             if (isModManagerInstalled)
             {
+                MelonLogger.Msg("Mod Manager & Phone App found. Enabling live settings integration.");
                 SubscribeToModManagerEvents();
+            }
+            else
+            {
+                MelonLogger.Msg("Mod Manager & Phone App not found. F3 settings remain available.");
             }
 
             HandleSettingsUpdate();
+            MelonLogger.Msg("Skoofidon's Minimap initialized. Press F3 for settings or F4 for diagnostics.");
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -175,7 +194,11 @@ namespace MinimapMod
                 ModManagerPhoneApp.ModSettingsEvents.OnPhonePreferencesSaved += HandleSettingsUpdate;
                 ModManagerPhoneApp.ModSettingsEvents.OnMenuPreferencesSaved += HandleSettingsUpdate;
             }
-            catch (Exception) { }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"Failed to subscribe to Mod Manager & Phone App settings events: {ex}");
+                isModManagerInstalled = false;
+            }
         }
 
         private void HandleSettingsUpdate()
@@ -252,77 +275,86 @@ namespace MinimapMod
             prefArrowG.Value = arrowG;
             prefArrowB.Value = arrowB;
 
-            prefCategory.SaveToFile();
             HandleSettingsUpdate();
+            settingsSavePending = true;
+            settingsSaveDueAt = Time.realtimeSinceStartup + 0.5f;
+        }
+
+        private void FlushPendingSettings()
+        {
+            if (!settingsSavePending) return;
+            prefCategory.SaveToFile();
+            settingsSavePending = false;
         }
 
         public override void OnGUI()
         {
             if (!guiVisible) return;
-
-            if (solidColorTex == null)
+            try
             {
-                solidColorTex = new Texture2D(1, 1);
-                solidColorTex.SetPixel(0, 0, Color.white);
-                solidColorTex.Apply();
+                Rect menuRect = new Rect(Screen.width - 260, 50, 240, 500);
+                GUI.color = new Color(0.15f, 0.15f, 0.15f, 0.95f);
+                GUI.Box(menuRect, GUIContent.none);
+                GUI.color = Color.white;
+
+                GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 5, 220, 20), "Skoofidon's Minimap");
+
+                scrollPosition = GUI.BeginScrollView(
+                    new Rect(menuRect.x, menuRect.y + 30, menuRect.width, menuRect.height - 35),
+                    scrollPosition,
+                    new Rect(0, 0, 220, 950));
+
+                float curY = 0f;
+
+                DrawToggle(new Rect(10, curY, 200, 25), "Minimap Enabled", ref minimapEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Time Display", ref timeBarEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Navigation Mode", ref useNavMode, SaveSettingsFromF3); curY += 30;
+
+                GUI.Label(new Rect(10, curY, 200, 20), "--- 2D Markers (Phone UI) ---"); curY += 25;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Orders", ref showOrdersEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Dealers", ref showDealersEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Customers", ref showCustomersEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Dead Drops", ref showDeadDropsEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Properties", ref showPropertiesEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Vehicles", ref showVehiclesEnabled, SaveSettingsFromF3); curY += 30;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Co-op Players", ref coopRadarEnabled, SaveSettingsFromF3); curY += 30;
+
+                GUI.Label(new Rect(10, curY, 200, 20), "--- 3D Radar (Real-time) ---"); curY += 25;
+                DrawToggle(new Rect(10, curY, 200, 25), "Show Police", ref policeRadarEnabled, SaveSettingsFromF3); curY += 30;
+
+                GUI.Label(new Rect(10, curY, 200, 20), "--- Map Layout & Size ---"); curY += 25;
+                DrawSlider(ref curY, "Window Size", ref windowSizeMultiplier, 1f, 3f);
+                DrawSlider(ref curY, "Map Zoom", ref mapZoom, 0.5f, 3f);
+                DrawSlider(ref curY, "Opacity", ref mapOpacity, 0.2f, 1f);
+                DrawSlider(ref curY, "Map Offset X", ref mapOffsetX, -Screen.width, Screen.width);
+                DrawSlider(ref curY, "Map Offset Y", ref mapOffsetY, -Screen.height, Screen.height);
+
+                GUI.Label(new Rect(10, curY, 200, 20), "--- Clock Layout ---"); curY += 25;
+                DrawSlider(ref curY, "Clock Offset X", ref timeOffsetX, -Screen.width, Screen.width);
+                DrawSlider(ref curY, "Clock Offset Y", ref timeOffsetY, -Screen.height, Screen.height);
+                DrawSlider(ref curY, "Clock Scale", ref timeScale, 0.5f, 3f);
+
+                GUI.Label(new Rect(10, curY, 200, 20), "--- Player Arrow ---"); curY += 25;
+                DrawSlider(ref curY, "Arrow Size", ref arrowSize, 0.5f, 3f);
+                GUI.Label(new Rect(10, curY, 200, 20), $"Arrow Color: R {arrowR:F2}  G {arrowG:F2}  B {arrowB:F2}");
+                curY += 25;
+
+                DrawColorSlider(ref curY, "R", ref arrowR);
+                DrawColorSlider(ref curY, "G", ref arrowG);
+                DrawColorSlider(ref curY, "B", ref arrowB);
+
+                GUI.EndScrollView();
+                hasLoggedGuiError = false;
             }
-
-            Rect menuRect = new Rect(Screen.width - 260, 50, 240, 500);
-            GUI.color = new Color(0.15f, 0.15f, 0.15f, 0.95f);
-            GUI.DrawTexture(menuRect, solidColorTex);
-            GUI.color = Color.white;
-
-            GUI.Label(new Rect(menuRect.x + 10, menuRect.y + 5, 220, 20), "<b>Skoofidon's Minimap</b>");
-
-            scrollPosition = GUI.BeginScrollView(
-                new Rect(menuRect.x, menuRect.y + 30, menuRect.width, menuRect.height - 35),
-                scrollPosition,
-                new Rect(0, 0, 220, 950));
-
-            float curY = 0f;
-
-            DrawToggle(new Rect(10, curY, 200, 25), "Minimap Enabled", ref minimapEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Time Display", ref timeBarEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Navigation Mode", ref useNavMode, SaveSettingsFromF3); curY += 30;
-
-            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- 2D Markers (Phone UI) ---</b>"); curY += 25;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Orders", ref showOrdersEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Dealers", ref showDealersEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Customers", ref showCustomersEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Dead Drops", ref showDeadDropsEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Properties", ref showPropertiesEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Vehicles", ref showVehiclesEnabled, SaveSettingsFromF3); curY += 30;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Co-op Players", ref coopRadarEnabled, SaveSettingsFromF3); curY += 30;
-
-            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- 3D Radar (Real-time) ---</b>"); curY += 25;
-            DrawToggle(new Rect(10, curY, 200, 25), "Show Police", ref policeRadarEnabled, SaveSettingsFromF3); curY += 30;
-
-            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- Map Layout & Size ---</b>"); curY += 25;
-            DrawSlider(ref curY, "Window Size", ref windowSizeMultiplier, 1f, 3f);
-            DrawSlider(ref curY, "Map Zoom", ref mapZoom, 0.5f, 3f);
-            DrawSlider(ref curY, "Opacity", ref mapOpacity, 0.2f, 1f);
-            DrawSlider(ref curY, "Map Offset X", ref mapOffsetX, -Screen.width, Screen.width);
-            DrawSlider(ref curY, "Map Offset Y", ref mapOffsetY, -Screen.height, Screen.height);
-
-            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- Clock Layout ---</b>"); curY += 25;
-            DrawSlider(ref curY, "Clock Offset X", ref timeOffsetX, -Screen.width, Screen.width);
-            DrawSlider(ref curY, "Clock Offset Y", ref timeOffsetY, -Screen.height, Screen.height);
-            DrawSlider(ref curY, "Clock Scale", ref timeScale, 0.5f, 3f);
-
-            GUI.Label(new Rect(10, curY, 200, 20), "<b>--- Player Arrow ---</b>"); curY += 25;
-            DrawSlider(ref curY, "Arrow Size", ref arrowSize, 0.5f, 3f);
-
-            GUI.Label(new Rect(10, curY, 100, 20), "Arrow Color");
-            GUI.color = new Color(arrowR, arrowG, arrowB);
-            GUI.DrawTexture(new Rect(130, curY, 70, 20), solidColorTex);
-            GUI.color = Color.white;
-            curY += 25;
-
-            DrawColorSlider(ref curY, "R", ref arrowR);
-            DrawColorSlider(ref curY, "G", ref arrowG);
-            DrawColorSlider(ref curY, "B", ref arrowB);
-
-            GUI.EndScrollView();
+            catch (Exception ex)
+            {
+                guiVisible = false;
+                if (!hasLoggedGuiError)
+                {
+                    MelonLogger.Error($"F3 settings UI failed and was closed to prevent log spam: {ex}");
+                    hasLoggedGuiError = true;
+                }
+            }
         }
 
         private void DrawSlider(ref float curY, string label, ref float val, float min, float max)
@@ -344,19 +376,10 @@ namespace MinimapMod
         private void DrawToggle(Rect position, string label, ref bool state, Action onToggle)
         {
             GUI.color = Color.white;
-            GUI.Label(new Rect(position.x + 40f, position.y, position.width - 40f, position.height), label);
-
-            Rect boxRect = new Rect(position.x, position.y + 4f, 32f, 16f);
-            GUI.color = state ? new Color(0.2f, 0.8f, 0.2f, 1f) : new Color(0.8f, 0.2f, 0.2f, 1f);
-            GUI.DrawTexture(boxRect, solidColorTex);
-
-            Rect knobRect = new Rect(state ? boxRect.x + 18f : boxRect.x + 2f, boxRect.y + 2f, 12f, 12f);
-            GUI.color = Color.white;
-            GUI.DrawTexture(knobRect, solidColorTex);
-
-            if (GUI.Button(position, GUIContent.none, GUIStyle.none))
+            bool newState = GUI.Toggle(position, state, label);
+            if (newState != state)
             {
-                state = !state;
+                state = newState;
                 onToggle();
             }
         }
@@ -365,33 +388,23 @@ namespace MinimapMod
                 {
                     try
                     {
+                        FlushPendingSettings();
                         if (sceneName == "Main" && !isInitializing)
                         {
                             isInitializing = true;
-                            if (minimapObject != null)
-                            {
-                                UnityEngine.Object.Destroy(minimapObject);
-                                minimapObject = null;
-                                cachedContentRt = null;
-                                cachedRotatorRt = null;
-                                cachedMinimapMask = null;
-                                cachedLocalPlayerUI = null;
-                                activeCoopPlayerRts.Clear();
-                                activePoliceTransforms.Clear();
-                                coopMarkers.Clear();
-                                policeMarkers.Clear();
-                            }
+                            StopBackgroundCoroutines();
+                            ClearSceneState();
 
                             CreateMinimapUI();
                             UpdateLayoutPositions();
                             UpdateMinimapSize();
                             UpdateMinimapOpacity();
 
-                            MelonCoroutines.Start(FindGameObjectsRoutine());
-                            MelonCoroutines.Start(UpdateMinimapTimeCoroutine());
-                            MelonCoroutines.Start(POISyncCoroutine());
+                            findObjectsCoroutine = MelonCoroutines.Start(FindGameObjectsRoutine());
+                            timeCoroutine = MelonCoroutines.Start(UpdateMinimapTimeCoroutine());
+                            poiCoroutine = MelonCoroutines.Start(POISyncCoroutine());
 
-                            MelonCoroutines.Start(OptimizedPoliceScannerCoroutine());
+                            policeCoroutine = MelonCoroutines.Start(OptimizedPoliceScannerCoroutine());
 
                             isInitializing = false;
                             hasLoggedUpdateError = false;
@@ -399,21 +412,9 @@ namespace MinimapMod
                         }
                         else if (sceneName != "Main")
                         {
+                            StopBackgroundCoroutines();
+                            ClearSceneState();
                             // Мы вышли в главное меню или другую сцену - зачищаем миникарту
-                            if (minimapObject != null)
-                            {
-                                UnityEngine.Object.Destroy(minimapObject);
-                                minimapObject = null;
-                                cachedContentRt = null;
-                                cachedRotatorRt = null;
-                                cachedMinimapMask = null;
-                                cachedLocalPlayerUI = null;
-                                activeCoopPlayerRts.Clear();
-                                activePoliceTransforms.Clear();
-                                coopMarkers.Clear();
-                                policeMarkers.Clear();
-                            }
-
                             isEnabled = false; // Отключаем логику в OnUpdate
                             isInitializing = false;
                         }
@@ -425,20 +426,107 @@ namespace MinimapMod
                     }
                 }
 
+        private void StopBackgroundCoroutines()
+        {
+            StopCoroutine(ref findObjectsCoroutine);
+            StopCoroutine(ref timeCoroutine);
+            StopCoroutine(ref poiCoroutine);
+            StopCoroutine(ref policeCoroutine);
+            StopCoroutine(ref diagnosticCoroutine);
+        }
+
+        private static void StopCoroutine(ref object coroutine)
+        {
+            if (coroutine == null) return;
+            try
+            {
+                MelonCoroutines.Stop(coroutine);
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning("Could not stop a completed minimap coroutine: " + ex.Message);
+            }
+            finally
+            {
+                coroutine = null;
+            }
+        }
+
+        private void ClearSceneState()
+        {
+            if (minimapObject != null) UnityEngine.Object.Destroy(minimapObject);
+
+            minimapObject = null;
+            minimapDisplayObject = null;
+            minimapTimeContainer = null;
+            minimapFrameRect = null;
+            minimapTimeText = null;
+            cachedGameTimeText = null;
+            cachedContentRt = null;
+            cachedRotatorRt = null;
+            cachedMinimapMask = null;
+            cachedLocalPlayerUI = null;
+            cachedPlayerMarker = null;
+            cachedMapContent = null;
+
+            mapAppObject = null;
+            viewportObject = null;
+            playerObject = null;
+            mapContentObject = null;
+            gridContainer = null;
+
+            activeCoopPlayerRts.Clear();
+            activePoliceTransforms.Clear();
+            policeScanBuffer.Clear();
+            coopMarkers.Clear();
+            coopMarkerRects.Clear();
+            coopMarkerImages.Clear();
+            policeMarkers.Clear();
+            policeMarkerRects.Clear();
+            policeMarkerImages.Clear();
+            syncedPOIs.Clear();
+            currentKeysBuffer.Clear();
+            validKeysBuffer.Clear();
+            scannerStack.Clear();
+            diagnosticStack.Clear();
+        }
+
         public override void OnUpdate()
         {
             try
             {
-                if (Input.GetKeyDown(KeyCode.F3)) guiVisible = !guiVisible;
+                if (settingsSavePending && Time.realtimeSinceStartup >= settingsSaveDueAt)
+                {
+                    FlushPendingSettings();
+                }
+
+                if (Input.GetKeyDown(KeyCode.F3))
+                {
+                    guiVisible = !guiVisible;
+                    if (!guiVisible) FlushPendingSettings();
+                    hasLoggedGuiError = false;
+                    MelonLogger.Msg($"F3 detected. Settings UI {(guiVisible ? "opened" : "closed")}.");
+                }
 
                 if (Input.GetKeyDown(KeyCode.F4))
                 {
-                    RunScanner();
+                    MelonLogger.Msg("F4 detected. Starting diagnostic scanner.");
+                    try
+                    {
+                        StopCoroutine(ref diagnosticCoroutine);
+                        diagnosticCoroutine = MelonCoroutines.Start(RunScannerRoutine());
+                    }
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Error($"F4 diagnostic scanner failed: {ex}");
+                    }
                 }
 
-                if (!isEnabled || playerObject == null || minimapDisplayObject == null || cachedContentRt == null) return;
+                if (!isEnabled || !minimapEnabled || playerObject == null || minimapDisplayObject == null || cachedContentRt == null) return;
 
-                Vector3 position = playerObject.transform.position;
+                Transform playerTransform = playerObject.transform;
+                Vector3 position = playerTransform.position;
+                float playerYaw = playerTransform.rotation.eulerAngles.y;
                 Vector2 baseOffset = new Vector2(-position.x * mapScale + 9f, -position.z * mapScale - 1f);
                 Vector2 targetPos = baseOffset * mapZoom;
 
@@ -446,16 +534,16 @@ namespace MinimapMod
 
                 if (cachedRotatorRt != null)
                 {
-                    float targetRot = useNavMode ? playerObject.transform.rotation.eulerAngles.y : 0f;
+                    float targetRot = useNavMode ? playerYaw : 0f;
                     float currentRot = cachedRotatorRt.localEulerAngles.z;
                     float newRot = Mathf.LerpAngle(currentRot, targetRot, Time.deltaTime * smoothingFactor);
                     cachedRotatorRt.localEulerAngles = new Vector3(0, 0, newRot);
                 }
 
-                UpdatePlayerArrow();
-                UpdateCoopMarkers();
+                UpdatePlayerArrow(playerYaw);
+                UpdateCoopMarkers(playerYaw);
 
-                if (policeRadarEnabled) Update3DMarkers(activePoliceTransforms, policeMarkers, new Color(0.2f, 0.4f, 1f));
+                if (policeRadarEnabled) Update3DMarkers(activePoliceTransforms, policeMarkers, new Color(0.2f, 0.4f, 1f), position, playerYaw);
             }
             catch (Exception ex)
             {
@@ -468,7 +556,7 @@ namespace MinimapMod
             }
         }
 
-        private void RunScanner()
+        private IEnumerator RunScannerRoutine()
         {
             MelonLogger.Msg("============== SCAN START ==============");
             if (cachedMapContent != null)
@@ -483,28 +571,57 @@ namespace MinimapMod
             if (playerObject != null)
             {
                 MelonLogger.Msg("--- 3D OBJECTS WITHIN 5 METERS ---");
-
-                GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
                 HashSet<string> loggedRoots = new HashSet<string>();
+                Transform playerTransform = playerObject.transform;
+                Transform playerRoot = playerTransform.root;
+                Vector3 playerPosition = playerTransform.position;
+                int checkedObjects = 0;
+                float sliceStartedAt = Time.realtimeSinceStartup;
+                diagnosticStack.Clear();
 
-                foreach (GameObject obj in allObjects)
+                for (int sceneIndex = 0; sceneIndex < SceneManager.sceneCount; sceneIndex++)
                 {
-                    if (obj.activeInHierarchy)
+                    Scene scene = SceneManager.GetSceneAt(sceneIndex);
+                    if (!scene.isLoaded) continue;
+
+                    GameObject[] roots = scene.GetRootGameObjects();
+                    foreach (GameObject rootObject in roots) diagnosticStack.Push(rootObject.transform);
+
+                    while (diagnosticStack.Count > 0)
                     {
-                        float dist = Vector3.Distance(playerObject.transform.position, obj.transform.position);
-                        if (dist <= 5f)
+                        Transform current = diagnosticStack.Pop();
+                        if (current != null && current.gameObject.activeInHierarchy)
                         {
-                            Transform root = obj.transform.root;
-                            if (root != playerObject.transform.root && !loggedRoots.Contains(root.name))
+                            if ((current.position - playerPosition).sqrMagnitude <= 25f)
                             {
-                                MelonLogger.Msg($"Found 3D: [{root.name}] | Path: {GetGameObjectPath(root)}");
-                                loggedRoots.Add(root.name);
+                                Transform root = current.root;
+                                string rootName = root.name;
+                                if (root != playerRoot && loggedRoots.Add(rootName))
+                                {
+                                    MelonLogger.Msg($"Found 3D: [{rootName}] | Path: {GetGameObjectPath(root)}");
+                                }
+                            }
+
+                            int childCount = current.childCount;
+                            for (int childIndex = 0; childIndex < childCount; childIndex++)
+                                diagnosticStack.Push(current.GetChild(childIndex));
+                        }
+
+                        checkedObjects++;
+                        if (checkedObjects >= 100)
+                        {
+                            checkedObjects = 0;
+                            if (Time.realtimeSinceStartup - sliceStartedAt >= 0.0015f)
+                            {
+                                yield return null;
+                                sliceStartedAt = Time.realtimeSinceStartup;
                             }
                         }
                     }
                 }
             }
             MelonLogger.Msg("=============== SCAN END ===============");
+            diagnosticCoroutine = null;
         }
 
         private string GetGameObjectPath(Transform transform)
@@ -520,17 +637,21 @@ namespace MinimapMod
 
         private IEnumerator OptimizedPoliceScannerCoroutine()
         {
+            WaitForSeconds inactiveWait = new WaitForSeconds(2f);
+            WaitForSeconds scanWait = new WaitForSeconds(3f);
             while (true)
             {
                 if (!minimapEnabled || playerObject == null || !policeRadarEnabled)
                 {
-                    yield return new WaitForSeconds(2f);
+                    yield return inactiveWait;
                     continue;
                 }
 
-                List<Transform> newPoliceList = new List<Transform>();
+                policeScanBuffer.Clear();
                 int checkCount = 0;
                 scannerStack.Clear();
+                Transform playerRoot = playerObject.transform.root;
+                float sliceStartedAt = Time.realtimeSinceStartup;
 
                 // Перебираем ВСЕ загруженные сцены, чтобы найти полицию даже если она в другом чанке
                 for (int sIdx = 0; sIdx < SceneManager.sceneCount; sIdx++)
@@ -550,9 +671,9 @@ namespace MinimapMod
                                 string name = t.name;
                                 if (name.Contains("SUV_Police") || name.Contains("Officer"))
                                 {
-                                    if (t.root != playerObject.transform.root)
+                                    if (t.root != playerRoot)
                                     {
-                                        newPoliceList.Add(t);
+                                        policeScanBuffer.Add(t);
                                     }
                                 }
 
@@ -564,39 +685,50 @@ namespace MinimapMod
                             }
 
                             checkCount++;
-                            if (checkCount >= 200)
+                            if (checkCount >= 100)
                             {
                                 checkCount = 0;
-                                yield return null;
+                                if (Time.realtimeSinceStartup - sliceStartedAt >= 0.0015f)
+                                {
+                                    yield return null;
+                                    sliceStartedAt = Time.realtimeSinceStartup;
+                                }
                             }
                         }
                     }
                 }
 
-                activePoliceTransforms = newPoliceList;
-                yield return new WaitForSeconds(3f);
+                List<Transform> previousResults = activePoliceTransforms;
+                activePoliceTransforms = policeScanBuffer;
+                policeScanBuffer = previousResults;
+                yield return scanWait;
             }
         }
 
-        private void Update3DMarkers(List<Transform> targets, List<GameObject> markers, Color color)
+        private void Update3DMarkers(List<Transform> targets, List<GameObject> markers, Color color, Vector3 playerPosition, float playerYaw)
         {
             if (cachedMinimapMask == null || playerObject == null) return;
 
             float minimapRadius = 70f * windowSizeMultiplier - 5f;
             int markerIndex = 0;
+            float cos = 1f;
+            float sin = 0f;
+            if (useNavMode)
+            {
+                float angle = playerYaw * Mathf.Deg2Rad;
+                cos = Mathf.Cos(angle);
+                sin = Mathf.Sin(angle);
+            }
 
             foreach (Transform t in targets)
             {
                 if (t == null) continue;
 
-                Vector3 diff = t.position - playerObject.transform.position;
+                Vector3 diff = t.position - playerPosition;
                 Vector2 offset = new Vector2(diff.x, diff.z) * mapScale * mapZoom;
 
                 if (useNavMode)
                 {
-                    float angle = playerObject.transform.rotation.eulerAngles.y * Mathf.Deg2Rad;
-                    float cos = Mathf.Cos(angle);
-                    float sin = Mathf.Sin(angle);
                     offset = new Vector2(offset.x * cos - offset.y * sin, offset.x * sin + offset.y * cos);
                 }
 
@@ -613,21 +745,24 @@ namespace MinimapMod
                     Image img = marker.AddComponent<Image>();
                     img.sprite = CreateCircleSprite(10, color);
                     markers.Add(marker);
+                    policeMarkerRects.Add(mrt);
+                    policeMarkerImages.Add(img);
                 }
 
                 GameObject currentMarker = markers[markerIndex];
-                currentMarker.SetActive(true);
-                RectTransform markerRt = currentMarker.GetComponent<RectTransform>();
+                if (!currentMarker.activeSelf) currentMarker.SetActive(true);
+                RectTransform markerRt = policeMarkerRects[markerIndex];
+                Image markerImage = policeMarkerImages[markerIndex];
 
                 if (offset.magnitude > minimapRadius)
                 {
                     markerRt.anchoredPosition = offset.normalized * minimapRadius;
-                    currentMarker.GetComponent<Image>().color = new Color(color.r, color.g, color.b, 0.4f);
+                    markerImage.color = new Color(color.r, color.g, color.b, 0.4f);
                 }
                 else
                 {
                     markerRt.anchoredPosition = offset;
-                    currentMarker.GetComponent<Image>().color = color;
+                    markerImage.color = color;
                 }
 
                 markerIndex++;
@@ -635,20 +770,21 @@ namespace MinimapMod
 
             for (int i = markerIndex; i < markers.Count; i++)
             {
-                if (markers[i] != null) markers[i].SetActive(false);
+                if (markers[i] != null && markers[i].activeSelf) markers[i].SetActive(false);
             }
         }
 
         private void ClearMarkers(List<GameObject> markers)
         {
-            foreach (var m in markers) if (m != null) m.SetActive(false);
+            foreach (var m in markers) if (m != null && m.activeSelf) m.SetActive(false);
         }
 
         private IEnumerator POISyncCoroutine()
         {
+            WaitForSeconds syncWait = new WaitForSeconds(1f);
             while (true)
             {
-                yield return new WaitForSeconds(1f);
+                yield return syncWait;
 
                 if (cachedMapContent == null || mapContentObject == null || !minimapEnabled) continue;
 
@@ -666,9 +802,11 @@ namespace MinimapMod
 
                 bool foundLocalPlayer = false;
 
-                for (int i = 0; i < cachedMapContent.transform.childCount; i++)
+                Transform mapContentTransform = cachedMapContent.transform;
+                int mapChildCount = mapContentTransform.childCount;
+                for (int i = 0; i < mapChildCount; i++)
                 {
-                    Transform child = cachedMapContent.transform.GetChild(i);
+                    Transform child = mapContentTransform.GetChild(i);
                     string childName = child.name;
 
                     if (childName.Contains("PlayerPoI(Clone)"))
@@ -740,7 +878,7 @@ namespace MinimapMod
             }
         }
 
-        private void UpdateCoopMarkers()
+        private void UpdateCoopMarkers(float playerYaw)
         {
             if (!coopRadarEnabled || cachedMapContent == null || playerObject == null || minimapDisplayObject == null || cachedMinimapMask == null || cachedLocalPlayerUI == null)
             {
@@ -755,6 +893,14 @@ namespace MinimapMod
             float ratioY = 500f / origContentRt.rect.height;
             float minimapRadius = 70f * windowSizeMultiplier - 5f;
             int markerIndex = 0;
+            float cos = 1f;
+            float sin = 0f;
+            if (useNavMode)
+            {
+                float angle = playerYaw * Mathf.Deg2Rad;
+                cos = Mathf.Cos(angle);
+                sin = Mathf.Sin(angle);
+            }
 
             foreach (RectTransform rt in activeCoopPlayerRts)
             {
@@ -774,32 +920,32 @@ namespace MinimapMod
                     img.sprite = CreateCircleSprite(10, Color.green);
                     img.color = Color.green;
                     coopMarkers.Add(marker);
+                    coopMarkerRects.Add(mrt);
+                    coopMarkerImages.Add(img);
                 }
 
                 GameObject currentMarker = coopMarkers[markerIndex];
-                currentMarker.SetActive(true);
-                RectTransform markerRt = currentMarker.GetComponent<RectTransform>();
+                if (!currentMarker.activeSelf) currentMarker.SetActive(true);
+                RectTransform markerRt = coopMarkerRects[markerIndex];
+                Image markerImage = coopMarkerImages[markerIndex];
 
                 Vector2 rawOffset = rt.anchoredPosition - cachedLocalPlayerUI.anchoredPosition;
                 Vector2 offset = new Vector2(rawOffset.x * ratioX, rawOffset.y * ratioY) * mapZoom;
 
                 if (useNavMode)
                 {
-                    float angle = playerObject.transform.rotation.eulerAngles.y * Mathf.Deg2Rad;
-                    float cos = Mathf.Cos(angle);
-                    float sin = Mathf.Sin(angle);
                     offset = new Vector2(offset.x * cos - offset.y * sin, offset.x * sin + offset.y * cos);
                 }
 
                 if (offset.magnitude > minimapRadius)
                 {
                     markerRt.anchoredPosition = offset.normalized * minimapRadius;
-                    currentMarker.GetComponent<Image>().color = new Color(0f, 1f, 0f, 0.4f);
+                    markerImage.color = new Color(0f, 1f, 0f, 0.4f);
                 }
                 else
                 {
                     markerRt.anchoredPosition = offset;
-                    currentMarker.GetComponent<Image>().color = new Color(0f, 1f, 0f, 1f);
+                    markerImage.color = new Color(0f, 1f, 0f, 1f);
                 }
 
                 markerIndex++;
@@ -807,7 +953,7 @@ namespace MinimapMod
 
             for (int i = markerIndex; i < coopMarkers.Count; i++)
             {
-                if (coopMarkers[i] != null) coopMarkers[i].SetActive(false);
+                if (coopMarkers[i] != null && coopMarkers[i].activeSelf) coopMarkers[i].SetActive(false);
             }
         }
 
@@ -969,8 +1115,15 @@ namespace MinimapMod
 
         private IEnumerator UpdateMinimapTimeCoroutine()
         {
+            WaitForSeconds timeWait = new WaitForSeconds(1f);
             while (true)
             {
+                if (!minimapEnabled || !timeBarEnabled)
+                {
+                    yield return timeWait;
+                    continue;
+                }
+
                 if (cachedGameTimeText == null)
                 {
                     GameObject val = GameObject.Find("GameplayMenu/Phone/phone/HomeScreen/InfoBar/Time");
@@ -986,7 +1139,7 @@ namespace MinimapMod
                     else
                         minimapTimeText.text = text;
                 }
-                yield return new WaitForSeconds(1f);
+                yield return timeWait;
             }
         }
 
@@ -1110,11 +1263,11 @@ namespace MinimapMod
             minimapTimeContainer.gameObject.SetActive(minimapEnabled && timeBarEnabled);
         }
 
-        private void UpdatePlayerArrow()
+        private void UpdatePlayerArrow(float playerYaw)
         {
             if (cachedPlayerMarker == null || playerObject == null) return;
 
-            float targetRotationZ = useNavMode ? 0f : -playerObject.transform.rotation.eulerAngles.y;
+            float targetRotationZ = useNavMode ? 0f : -playerYaw;
             cachedPlayerMarker.transform.localRotation = Quaternion.Euler(0, 0, targetRotationZ);
         }
 

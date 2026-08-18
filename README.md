@@ -4,7 +4,7 @@ A configurable minimap and real-time radar mod for **Schedule I**.
 
 Skoofidon's Minimap keeps the most useful information from the in-game phone map visible while you play. It can display points of interest, co-op players, and nearby police, and includes controls for the map's size, zoom, opacity, position, clock, and player marker.
 
-> Current mod version: **2.2.5**
+> Current mod version: **2.2.7**
 
 ## Features
 
@@ -20,6 +20,7 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
   - owned vehicles
   - co-op players
 - Real-time police radar
+- Incremental, time-budgeted radar scanning to reduce frame-time spikes
 - Adjustable minimap size, zoom, opacity, and screen position
 - Adjustable clock position and scale
 - Customizable player-arrow size and color
@@ -28,14 +29,17 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
 
 ## Requirements
 
-- **Schedule I** on PC
-- [MelonLoader](https://github.com/LavaGang/MelonLoader)
+- **Schedule I** on PC — default IL2CPP branch
+- Game version `0.4.6f13`
+- [MelonLoader 0.7.3](https://github.com/LavaGang/MelonLoader/releases/tag/v0.7.3)
 
-**Mod Manager & Phone App is optional.** The minimap has its own in-game settings menu and works without it.
+MelonLoader 0.7.2 is not compatible with the current Schedule I IL2CPP build.
+
+**Mod Manager & Phone App is optional.** Version `2.2.4` has been tested with this release. The minimap has its own in-game settings menu and works without the Phone App.
 
 ## Installation
 
-1. Install MelonLoader for Schedule I.
+1. Install MelonLoader 0.7.3 for Schedule I.
 2. Download the latest `SkoofidMinimap.dll` from the [Releases](https://github.com/youseemenot/schedule1-Skoofidons-Minimap/releases) page.
 3. Copy `SkoofidMinimap.dll` into the game's `Mods` folder:
    ```text
@@ -50,7 +54,7 @@ If the `Mods` folder does not exist, start the game once after installing MelonL
 | Key | Action |
 | --- | --- |
 | `F3` | Open or close the minimap settings |
-| `F4` | Run the diagnostic scanner and write results to the MelonLoader log |
+| `F4` | Run the incremental diagnostic scanner and write results to the MelonLoader log |
 
 ## Configuration
 
@@ -73,6 +77,14 @@ Changes are saved automatically through MelonLoader preferences.
 Replace the old `SkoofidMinimap.dll` in the `Mods` folder with the file from the newest release. Your saved preferences should remain available.
 
 ## Troubleshooting
+
+### No mods load after updating Schedule I
+
+Update MelonLoader to version `0.7.3`. MelonLoader `0.7.2` cannot generate the required IL2CPP interop assemblies for Schedule I `0.4.6f13`.
+
+### The Phone App does not appear
+
+Make sure you are using Mod Manager & Phone App `2.2.4` or a compatible newer version. Older versions reference game types that were removed in the Schedule I update. The minimap's built-in F3 settings remain available without the Phone App.
 
 ### The minimap does not appear
 
