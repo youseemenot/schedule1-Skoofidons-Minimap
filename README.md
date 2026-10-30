@@ -4,7 +4,9 @@ A configurable minimap and real-time radar mod for **Schedule I**.
 
 Skoofidon's Minimap keeps the most useful information from the in-game phone map visible while you play. It can display points of interest, co-op players, and nearby police, and includes controls for the map's size, zoom, opacity, position, clock, and player marker.
 
-> Current mod version: **2.2.7**
+> Source development version: **2.2.8-dev.3**. Latest released version: **2.2.7**.
+>
+> The development build adds world-position tracking independent of the phone map. The user has checked the map texture, NPC portraits, clock and dealer appearance on **Schedule I 0.4.7f12**. **Co-op has not yet been tested in game.** FPS/frame-time benchmarking remains pending. See [acceptance checks](docs/testing/independent-markers.md).
 
 ## Features
 
@@ -19,6 +21,7 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
   - properties
   - owned vehicles
   - co-op players
+- Amber dealer highlighting, compensated for map zoom and canvas scale; customer portraits retain the original style
 - Real-time police radar
 - Incremental, time-budgeted radar scanning to reduce frame-time spikes
 - Adjustable minimap size, zoom, opacity, and screen position
@@ -30,12 +33,28 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
 ## Requirements
 
 - **Schedule I** on PC — default IL2CPP branch
-- Game version `0.4.6f13`
+- Game version `0.4.7f12` for the current development build
 - [MelonLoader 0.7.3](https://github.com/LavaGang/MelonLoader/releases/tag/v0.7.3)
 
 MelonLoader 0.7.2 is not compatible with the current Schedule I IL2CPP build.
 
 **Mod Manager & Phone App is optional.** Version `2.2.4` has been tested with this release. The minimap has its own in-game settings menu and works without the Phone App.
+
+The current candidate is compiled against the installed game's regenerated interop/Unity/loader assemblies and uses `NPC.MugshotSprite`. Phone App `2.2.4` was present during the user's single-player check. Release 2.2.7 targeted game `0.4.6f13`; see the changelog for that historical baseline. Co-op host/guest behavior is still unverified.
+
+## Building the development candidate
+
+Use a .NET SDK with .NET 6 targeting references and pass the read-only game directory to resolve IL2CPP/Harmony build references:
+
+```powershell
+dotnet build SniccupMiniMap.csproj -c Release '-p:GameDirectory=S:\SteamLibrary\steamapps\common\Schedule I'
+dotnet run --project tests/TrackingPolicy.Tests/TrackingPolicy.Tests.csproj -c Release
+./tools/Test-GameApi.ps1 -ModPath '<candidate DLL>' -GameDirectory 'S:\SteamLibrary\steamapps\common\Schedule I'
+```
+
+The offline regression executable requires the .NET 10 SDK. Build output stays in this checkout; there is no deployment target. Only `SkoofidMinimap.dll` is the mod artifact. Game interop references are not copied to the output or distributed.
+
+The metadata API check runs in PowerShell 7 and reads the candidate plus the current `Assembly-CSharp.dll` without executing game/mod code. It catches removed direct game-member references; the full current-reference build is still needed for signatures, generic/inherited API calls and Unity types.
 
 ## Installation
 
@@ -95,7 +114,7 @@ Make sure you are using Mod Manager & Phone App `2.2.4` or a compatible newer ve
 
 ### Markers are missing
 
-Some 2D markers are synchronized from the in-game phone map. Open the phone map once and allow a moment for the markers to refresh. Police tracking uses a separate real-time scanner.
+Release 2.2.7 synchronizes some 2D markers from the phone map. The development candidate obtains NPC positions from world POIs and co-op positions from the player registry. NPC portraits use the game's icon template and messaging portrait. Static POIs retain the original synchronization path; police tracking retains its separate scanner. If NPC binding cannot initialize, the candidate reports a warning and preserves the old phone NPC path rather than disabling the entire map.
 
 ### The layout is off-screen
 

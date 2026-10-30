@@ -2,24 +2,38 @@
   <PropertyGroup>
     <AssemblyName>SkoofidMinimap</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
-    <TargetFramework>net472</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TargetFramework>net6.0</TargetFramework>
+    <!-- MelonLoader's IL2CPP host and game interop assemblies use .NET 6. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <GameInteropDirectory Condition="'$(GameInteropDirectory)' == ''">$(GameDirectory)\MelonLoader\Il2CppAssemblies</GameInteropDirectory>
+    <GameLoaderDirectory Condition="'$(GameLoaderDirectory)' == ''">$(GameDirectory)\MelonLoader\net6</GameLoaderDirectory>
   </PropertyGroup>
   <PropertyGroup>
     <LangVersion>11.0</LangVersion>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="MelonLoader"><HintPath>MelonLoader.dll</HintPath></Reference>
-    <Reference Include="UnityEngine.CoreModule"><HintPath>UnityEngine.CoreModule.dll</HintPath></Reference>
-    <Reference Include="UnityEngine.UI"><HintPath>UnityEngine.UI.dll</HintPath></Reference>
-    <Reference Include="UnityEngine.UIModule"><HintPath>UnityEngine.UIModule.dll</HintPath></Reference>
-    <Reference Include="UnityEngine.IMGUIModule"><HintPath>UnityEngine.IMGUIModule.dll</HintPath></Reference>
-    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>UnityEngine.TextRenderingModule.dll</HintPath></Reference>
-    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>UnityEngine.InputLegacyModule.dll</HintPath></Reference>
+    <Compile Include="MinimapMod\**\*.cs" />
+    <Compile Include="Properties\**\*.cs" />
+    <Reference Include="Assembly-CSharp"><HintPath>$(GameInteropDirectory)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppFishNet.Runtime"><HintPath>$(GameInteropDirectory)\Il2CppFishNet.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppScheduleOne.Core"><HintPath>$(GameInteropDirectory)\Il2CppScheduleOne.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(GameLoaderDirectory)\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="MelonLoader"><HintPath>$(GameLoaderDirectory)\MelonLoader.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameInteropDirectory)\UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(GameInteropDirectory)\UnityEngine.UI.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(GameInteropDirectory)\UnityEngine.UIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameInteropDirectory)\UnityEngine.IMGUIModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameInteropDirectory)\UnityEngine.TextRenderingModule.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(GameInteropDirectory)\UnityEngine.InputLegacyModule.dll</HintPath></Reference>
 
-    <Reference Include="Il2Cppmscorlib"><HintPath>Il2Cppmscorlib.dll</HintPath></Reference>
-    <Reference Include="Il2CppInterop.Runtime"><HintPath>Il2CppInterop.Runtime.dll</HintPath></Reference>
+    <Reference Include="Il2Cppmscorlib"><HintPath>$(GameInteropDirectory)\Il2Cppmscorlib.dll</HintPath></Reference>
+    <Reference Include="Il2CppInterop.Runtime"><HintPath>$(GameLoaderDirectory)\Il2CppInterop.Runtime.dll</HintPath></Reference>
 
     <Reference Include="ModManager&amp;PhoneApp"><HintPath>ModManager&amp;PhoneApp.dll</HintPath></Reference>
   </ItemGroup>
+  <ItemDefinitionGroup>
+    <Reference><Private>false</Private></Reference>
+  </ItemDefinitionGroup>
 </Project>
