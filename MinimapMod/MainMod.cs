@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-[assembly: MelonInfo(typeof(MinimapMod.MainMod), "Skoofidon's Minimap", "2.2.8-dev.3", "Youseemenot (Orig. Hiccup)", null)]
+[assembly: MelonInfo(typeof(MinimapMod.MainMod), "Skoofidon's Minimap", "2.2.8", "Youseemenot (Orig. Hiccup)", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonOptionalDependencies("ModManager&PhoneApp")]
 

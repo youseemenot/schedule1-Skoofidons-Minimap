@@ -59,4 +59,6 @@ Files: `README.md`, `docs/testing/independent-markers.md`.
 
 ## Accepted state recorded on 2026-10-30
 
-The user approved the dev.3 dealer appearance and requested a local Git commit plus changelog update. Current version is 2.2.8-dev.3 / assembly2.2.8.2 on game0.4.7f12. Visual single-player feedback is recorded in the testing document; co-op remains explicitly unverified. The complete suite now has18 tests. No remote push, tag or publication is requested.
+The user approved the dev.3 dealer appearance and requested a local Git commit plus changelog update. That checkpoint is 2.2.8-dev.3 / assembly2.2.8.2 on game0.4.7f12. Visual single-player feedback is recorded in the testing document; co-op remains explicitly unverified. The complete suite now has18 tests.
+
+The user subsequently requested GitHub publication with a release and removal of the dev suffix. Publish 2.2.8 / assembly2.2.8.0 with the accepted behavior, updated changelog and explicit co-op/performance verification status. Push the release commit and v2.2.8 tag, attach only the built mod DLL, and leave the installed game files untouched.

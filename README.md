@@ -4,9 +4,9 @@ A configurable minimap and real-time radar mod for **Schedule I**.
 
 Skoofidon's Minimap keeps the most useful information from the in-game phone map visible while you play. It can display points of interest, co-op players, and nearby police, and includes controls for the map's size, zoom, opacity, position, clock, and player marker.
 
-> Source development version: **2.2.8-dev.3**. Latest released version: **2.2.7**.
+> Current version: **2.2.8**.
 >
-> The development build adds world-position tracking independent of the phone map. The user has checked the map texture, NPC portraits, clock and dealer appearance on **Schedule I 0.4.7f12**. **Co-op has not yet been tested in game.** FPS/frame-time benchmarking remains pending. See [acceptance checks](docs/testing/independent-markers.md).
+> This release adds world-position tracking independent of the phone map. The user has checked the map texture, NPC portraits, clock and dealer appearance on **Schedule I 0.4.7f12**. **Co-op has not yet been tested in game.** FPS/frame-time benchmarking remains pending. See [acceptance checks](docs/testing/independent-markers.md).
 
 ## Features
 
@@ -33,16 +33,16 @@ Skoofidon's Minimap keeps the most useful information from the in-game phone map
 ## Requirements
 
 - **Schedule I** on PC — default IL2CPP branch
-- Game version `0.4.7f12` for the current development build
+- Game version `0.4.7f12`
 - [MelonLoader 0.7.3](https://github.com/LavaGang/MelonLoader/releases/tag/v0.7.3)
 
 MelonLoader 0.7.2 is not compatible with the current Schedule I IL2CPP build.
 
 **Mod Manager & Phone App is optional.** Version `2.2.4` has been tested with this release. The minimap has its own in-game settings menu and works without the Phone App.
 
-The current candidate is compiled against the installed game's regenerated interop/Unity/loader assemblies and uses `NPC.MugshotSprite`. Phone App `2.2.4` was present during the user's single-player check. Release 2.2.7 targeted game `0.4.6f13`; see the changelog for that historical baseline. Co-op host/guest behavior is still unverified.
+Version 2.2.8 is compiled against the installed game's regenerated interop/Unity/loader assemblies and uses `NPC.MugshotSprite`. Phone App `2.2.4` was present during the user's single-player check. Release 2.2.7 targeted game `0.4.6f13`; see the changelog for that historical baseline. Co-op host/guest behavior is still unverified.
 
-## Building the development candidate
+## Building
 
 Use a .NET SDK with .NET 6 targeting references and pass the read-only game directory to resolve IL2CPP/Harmony build references:
 

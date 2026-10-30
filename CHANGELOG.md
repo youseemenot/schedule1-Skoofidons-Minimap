@@ -2,7 +2,7 @@
 
 All notable changes to Skoofidon's Minimap are documented in this file.
 
-## [2.2.8-dev.3] - 2026-10-30
+## [2.2.8] - 2026-10-30
 
 ### Added
 
@@ -32,7 +32,7 @@ All notable changes to Skoofidon's Minimap are documented in this file.
 - **Co-op is not yet verified in game:** host/guest movement, join/leave and reconnect remain pending.
 - Automated checks: 18/18 tests, Release build with zero warnings/errors, current direct game API metadata check passes.
 - Quantitative FPS/frame-time and long-run memory benchmarks remain pending. The CPU budget is soft and does not guarantee zero impact.
-- This remains a development version, not a fully verified stable release.
+- Published as version `2.2.8`; co-op verification and quantitative benchmarks remain pending as noted above.
 
 ## [2.2.7] - 2026-08-18
 

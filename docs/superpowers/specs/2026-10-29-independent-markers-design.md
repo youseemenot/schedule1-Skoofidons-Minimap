@@ -7,7 +7,7 @@ The user approved implementation after the investigation in this chat.
 - Use game-owned NPC/POI and player references, with cached views and bounded work. Do not introduce recurring scene searches, name matching, forced phone opening, per-frame registry enumeration, or repeated texture creation.
 - Preserve the existing police scanner and static POI behavior. Remove duplicate NPC/co-op UI markers from the old synchronization path.
 - Limit coordinate sampling and creation work, reuse buffers, stop processing disabled categories, and remove stale scene references. Performance must be measured in game before claiming no regression.
-- Initial source-only scope kept all installed game files read-only. The user later authorized replacing only the minimap DLL with a backup, and on 2026-10-30 authorized a local Git commit. Other game files remain untouched; game launch and publishing are not authorized. Build/test outputs stay in the workspace.
+- Initial source-only scope kept all installed game files read-only. The user later authorized replacing only the minimap DLL with a backup, and on 2026-10-30 authorized a local Git commit followed by GitHub publication as version 2.2.8. Other game files remain untouched; game launch is not authorized. Release preparation does not replace the installed DLL. Build/test outputs stay in the workspace.
 
 ## Approach
 

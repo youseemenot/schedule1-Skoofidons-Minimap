@@ -2,13 +2,13 @@
 
 ## Current status — 2026-10-30
 
-- Accepted development version: **2.2.8-dev.3**, assembly/file version **2.2.8.2**.
+- Release version: **2.2.8**, assembly/file version **2.2.8.0**. Behavior and appearance match the accepted **2.2.8-dev.3** build.
 - User-confirmed target game: **Schedule I 0.4.7f12**, MelonLoader 0.7.3 and Phone App 2.2.4.
 - User screenshots/feedback confirm map texture, NPC portraits, clock and amber dealer appearance. The supplied dev.2 log has no minimap errors.
 - **Co-op has not been tested in game.** Host/guest movement, disconnect/reconnect and edge behavior remain pending.
 - The complete closed-phone/reload acceptance matrix and quantitative FPS/frame-time/memory comparison remain pending; visual approval is not a benchmark.
 - Offline checks: 18/18 regression tests, Release build with zero warnings/errors, and metadata API check passed.
-- Installed candidate SHA256: `31AAAD05C1EA75ADB7E785CEED1CECFE21AF9C2CF18EF8BD1242AB2FF2E75993`. The subsequent inner-background change was cancelled at the user's request; keep the accepted dev.3 appearance.
+- User-tested installed dev.3 SHA256: `31AAAD05C1EA75ADB7E785CEED1CECFE21AF9C2CF18EF8BD1242AB2FF2E75993`. The subsequent inner-background change was cancelled at the user's request; keep the accepted dev.3 appearance. Release preparation changes version metadata and documentation only; the installed DLL is not replaced.
 
 ## Candidate design
 

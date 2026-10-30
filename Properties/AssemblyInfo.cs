@@ -17,5 +17,5 @@ using System.Runtime.InteropServices;
 [assembly: Guid("12345678-1234-1234-1234-123456789012")]
 
 // Сведения о версии сборки задаются версией нашего мода
-[assembly: AssemblyVersion("2.2.8.2")]
-[assembly: AssemblyFileVersion("2.2.8.2")]
+[assembly: AssemblyVersion("2.2.8.0")]
+[assembly: AssemblyFileVersion("2.2.8.0")]
